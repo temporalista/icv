@@ -3,6 +3,8 @@ title: "Cálculo del Índice de Condiciones de Vida ICV"
 author: "Ma Laura Guerrero, Pablo Osorio, Daniel Orellana. LlactaLAB Ciudades Sustentables. Universidad de Cuenca"
 date: "9/20/2021"
 output: html_notebook
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r}
@@ -18,11 +20,18 @@ library(plyr)
 ```{r datos originales}
 
 ###Datos originales del CNPV
-###
+
+### Pichincha
 
 c.pers<-read.csv("Pichincha_CSV_Poblac.csv")
 c.hogar<-read.csv("Pichincha_CSV_Hogar.csv")
 c.viv<-read.csv("Pichincha_CSV_Vivienda.csv")
+
+### Azuay
+c.pers<-read.csv("Azuay_CSV_Poblac.csv")
+c.hogar<-read.csv("Azuay_CSV_Hogar.csv")
+c.viv<-read.csv("Azuay_CSV_Vivienda.csv")
+
 
 ```
 
@@ -430,6 +439,7 @@ c.viv$ICV<-(c.viv$VIVIENDA+c.viv$SERVICIOS+c.viv$EDUCACION+c.viv$SEGURIDAD_SOCIA
 
 c.viv$codcanton<-paste(c.viv$I01,c.viv$I02,c.viv$I03,sep = "")
 
+#quito
 df.uio<-c.viv %>%
   dplyr::filter(codcanton %in% c(170150, 170155,170157,170184))
 
@@ -451,6 +461,24 @@ write.csv(df.uiofin,"UIO_ICV_VIVIENDA_COMPLETO.csv")
     icv.cuartil<-dcast(df.uiofin,DPA_SECTOR~quantile_rank,sum,value.var="TOTPER")
 
 write.csv(icv.cuartil,"UIO_ICV_PIVOT_CUARTIL_SECTOR_COMPLETO.csv")
+
+
+# Cuenca
+
+
+df.cue<-c.viv %>%
+  dplyr::filter(codcanton %in% c("010150"))
+
+
+df.cue<-df.cue %>%  
+        mutate(quantile_rank = ntile(df.cue$ICV,4))
+
+df.cue<-df.cue %>%  
+        select(-(9:29),-(31:32),-(34:55))
+
+df.cue$DPA_SECTOR<-paste(df.cue$I01,df.cue$I02,df.cue$I03,df.cue$I04,df.cue$I05,sep = "")
+
+write.csv(df.cue,"CUENCA_ICV_VIVIENDA_COMPLETO.csv")
 
 ```
 
