@@ -423,7 +423,7 @@ c.viv$ICV<-(c.viv$VIVIENDA+c.viv$SERVICIOS+c.viv$EDUCACION+c.viv$SEGURIDAD_SOCIA
 
 ```
 
-```{r segmentacion y cuartiles}
+```{r filtro y cuartiles}
 ##Base Quito. Segmentar para el cantón, para obtener cuartiles
 
 ##1 Crear columna de parroquia y sector para la segmentación
