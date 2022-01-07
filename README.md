@@ -28,4 +28,4 @@ Debe tener instalado RStudio [www.rstudio.com](www.rstudio.com)
 
 5.  Ejecutar el código
 
-**Como citar**: Orellana, D., & Osorio, P. (2014). Segregación socio-espacial urbana en Cuenca, Ecuador. *Analitika*, *8*(2), 27–38. <http://www.analitika.ec/pdf/vol8/ANADic2014_27_38.pdf>
+**Como citar**: Orellana, D., & Osorio, P. (2014). Segregación socio-espacial urbana en Cuenca, Ecuador. *Analitika*, *8*(2), 27–38. <https://dialnet.unirioja.es/descarga/articulo/5004620.pdf>
