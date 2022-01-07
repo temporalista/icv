@@ -1,0 +1,486 @@
+---
+title: "Cálculo del Índice de Condiciones de Vida ICV"
+author: "Ma Laura Guerrero, Pablo Osorio, Daniel Orellana. LlactaLAB Ciudades Sustentables. Universidad de Cuenca"
+date: "9/20/2021"
+output: html_notebook
+---
+
+```{r}
+library(readxl)
+library(lubridate)
+library(dplyr)
+library(reshape2)
+library(stringr)
+library(plyr)
+
+```
+
+```{r datos originales}
+
+###Datos originales del CNPV
+###
+
+c.pers<-read.csv("Pichincha_CSV_Poblac.csv")
+c.hogar<-read.csv("Pichincha_CSV_Hogar.csv")
+c.viv<-read.csv("Pichincha_CSV_Vivienda.csv")
+
+```
+
+```{r Recodificacion}
+
+#Recodificacion
+
+c.pers$I01<-str_pad(c.pers$I01, 2, pad = "0")
+c.pers$I02<-str_pad(c.pers$I02, 2, pad = "0")
+c.pers$I04<-str_pad(c.pers$I04, 3, pad = "0")
+c.pers$I05<-str_pad(c.pers$I05, 3, pad = "0")
+c.pers$I06<-str_pad(c.pers$I06, 2, pad = "0")
+c.pers$I09<-str_pad(c.pers$I09, 3, pad = "0")
+c.pers$I10<-str_pad(c.pers$I10, 2, pad = "0")
+
+c.hogar$I01<-str_pad(c.hogar$I01, 2, pad = "0")
+c.hogar$I02<-str_pad(c.hogar$I02, 2, pad = "0")
+c.hogar$I04<-str_pad(c.hogar$I04, 3, pad = "0")
+c.hogar$I05<-str_pad(c.hogar$I05, 3, pad = "0")
+c.hogar$I06<-str_pad(c.hogar$I06, 2, pad = "0")
+c.hogar$I09<-str_pad(c.hogar$I09, 3, pad = "0")
+c.hogar$I10<-str_pad(c.hogar$I10, 2, pad = "0")
+
+c.viv$I01<-str_pad(c.viv$I01, 2, pad = "0")
+c.viv$I02<-str_pad(c.viv$I02, 2, pad = "0")
+c.viv$I04<-str_pad(c.viv$I04, 3, pad = "0")
+c.viv$I05<-str_pad(c.viv$I05, 3, pad = "0")
+c.viv$I06<-str_pad(c.viv$I06, 2, pad = "0")
+c.viv$I09<-str_pad(c.viv$I09, 3, pad = "0")
+c.viv$I10<-str_pad(c.viv$I10, 2, pad = "0")
+
+```
+
+```{r calculo salud}
+
+#1. CALCULO DEL INDICADOR DE SEGURIDAD SOCIAL (SALUD).
+        #1.1 Diferenciar quiénes están afiliados a cualquier seguro social (IESS, ISSFA, ISSPOL).
+
+c.pers$codhog<-paste(c.pers$I01,c.pers$I02,c.pers$I03,c.pers$I04,c.pers$I05,c.pers$I06,c.pers$I09,c.pers$I10,sep = "")
+
+
+c.pers$seg.soc<- ifelse(c.pers$P35>= 1 & c.pers$P35<= 6,1,0)
+
+#1.1.1 Utilizar una variable auxiliar para incorporar a los hijos que tendrán servicio de salud, primero ubicamos a los jefes de familia con seguro social.
+        #agrupamos los codigos
+
+seg.jefe <- c.pers %>%
+group_by(codhog) %>%
+dplyr::summarize(SegJefe = first(seg.soc))
+
+c.pers<-c.pers %>% left_join(seg.jefe, by = "codhog")
+
+#1.2 Calcular Seguridad social para todo el hogar. Incluye a conyugue e hijos de afiliado, ademas de seguro privado.
+
+
+c.pers$salud<- ifelse(c.pers$seg.soc==1|c.pers$P07==1|
+                     (c.pers$P03<19 & c.pers$P02==3 & c.pers$SegJefe==1)|
+                     (c.pers$P02 == 2 & c.pers$SegJefe==1),1,0)
+
+
+#1.3 Calcular una media de seguridad social por vivienda.
+
+c.pers$codviv<-paste(c.pers$I01,c.pers$I02,c.pers$I03,
+                     c.pers$I04,c.pers$I05,c.pers$I06,c.pers$I09,sep = "")
+
+
+#med.segsoc <- ddply(c.pers,.(codviv),summarize, med.segsoc=mean(salud, na.rm=TRUE))
+
+med.segsoc <- c.pers %>%
+group_by(codviv) %>%
+dplyr::summarize(Mean_salud = mean(salud, na.rm=TRUE))
+
+
+```
+
+```{r calculo educacion}
+ #2. CALCULO DEL INDICADOR DE EDUCACION. 
+        #recordar aislar valor 99 (no contesta) en GRAESC 
+        #2.1 Calcular los anos de educacion requeridos por edad. Anos que deben haber estudiado.
+
+c.pers <- c.pers %>% 
+  mutate(anos_educ = case_when(P03 == 8 ~ 2,
+                               P03 == 9 ~ 3,
+                               P03 == 10 ~ 4,
+                               P03 == 11 ~ 5,
+                               P03 == 12 ~ 6,
+                               P03 == 13 ~ 7,
+                               P03 == 14 ~ 8,
+                               P03 == 15 ~ 9,
+                               P03 == 16 ~ 10,
+                               P03 == 17 ~ 11,
+                               P03 == 18 ~ 12,
+                               P03 >= 19 ~ 13,
+                               P03 >= 0 & P03 <= 7 ~ 1))
+
+ #2.2 Calcular la adecuacion educativa de cada persona en el hogar.
+
+#c.pers <- c.pers %>% 
+#  mutate(GRAESC = case_when(P03 <= 6 ~ 0))
+
+c.pers <- c.pers %>% 
+  mutate(educacion = case_when(P03 > 6  & GRAESC != 99 ~ (GRAESC/anos_educ) ))
+
+#2.3 Esta variable requiere de una recodificacion, puesto que hay casos en los que su nivel de educacion sobrepasa el maximo de 2.
+  #2.3.1 Primero recalcular los datos mayores a 1 y copiar los valores mayores a 1 que estan calculados
+         #Ojo, el numero 4 de la formula, puede variar dependiendo del maximo.
+
+c.pers <- c.pers %>% 
+  mutate(educacion_recode = case_when(educacion > 1 ~ (1+((educacion-1)/(4-1))),
+                                      educacion <= 1 ~ educacion ))
+
+#2.4 Calcular la media de educacion por vivienda.
+
+#med.educ <- ddply(c.pers,.(codviv),summarize, med.educ=mean(educacion_recode))
+
+med.educ <- c.pers %>%
+group_by(codviv) %>%
+dplyr::summarize(Mean_educ = mean(educacion_recode, na.rm=TRUE))
+
+
+#POR ULTIMO, ES NECESARIO PEGAR LAS MEDIAS DE SEGURIDAD SOCIAL Y EDUCACION EN LA BASE DE DATOS DE VIVIENDA.
+
+c.viv$codviv<-paste(c.viv$I01,c.viv$I02,c.viv$I03,c.viv$I04,c.viv$I05,c.viv$I06,c.viv$I09,sep = "")
+
+c.viv<-c.viv %>% left_join(med.segsoc, by = "codviv")
+c.viv<-c.viv %>% left_join(med.educ, by = "codviv")
+
+
+```
+
+```{r calculo comunicacion}
+# TRABAJAR EN LA BASE DE DATOS DE HOGAR DEL CENSO 2010, ECUADOR.
+
+# *1. CÁLCULO DEL INDICADOR INTEGRADO DE COMUNICACIÓN.
+        # *1.1 Calcular la disponibilidad de telefonía fija en el hogar.
+
+c.hogar <- c.hogar %>% 
+  mutate(telefono = case_when(H07 == 1 ~ 1,
+                              H07 == 2 ~ 0))
+ # *1.2 Calcular la disponibilidad de celular en el hogar.
+
+c.hogar <- c.hogar %>% 
+  mutate(celular = case_when(H08 == 1 ~ 1,
+                             H08 == 2 ~ 0))
+
+ # *1.3 Calcular la disponibilidad de internet en el hogar.
+
+c.hogar <- c.hogar %>% 
+  mutate(internet = case_when(H09 == 1 ~ 1,
+                              H09 == 2 ~ 0))
+
+ # *1.4 Calcular la disponibilidad de tvcable en el hogar.
+
+c.hogar <- c.hogar %>% 
+  mutate(tvcable =  case_when(H11 == 1 ~ 2,
+                              H11 == 2 ~ 1))
+
+ # *1.5 Calcular la suma ponderada de facilidades de comunicacion.
+
+c.hogar$comunicacion <- (0.4*c.hogar$telefono)+(0.2*c.hogar$celular)+(0.2*c.hogar$internet)+(0.2*c.hogar$tvcable)
+
+# *1.6 Calcular una media de comunicación por vivienda.
+
+c.hogar$codviv<-paste(c.hogar$I01,c.hogar$I02,c.hogar$I03,c.hogar$I04,c.hogar$I05,c.hogar$I06,c.hogar$I09,sep = "")
+
+#med.comunicacion <- ddply(c.hogar,.(codviv),summarize, med.comunicacion=mean(comunicacion))
+
+med.comunicacion <- c.hogar %>%
+group_by(codviv) %>%
+dplyr::summarize(Mean_comunic = mean(comunicacion, na.rm=TRUE))
+
+```
+
+```{r calculo energia}
+
+# *2. CÁLCULO DEL INDICADOR INTEGRADO DE ENERGÍA.
+        # *En esta base se calcula una parte, y en la base de datos de vivienda, se completa el cálculo.
+
+c.hogar <- c.hogar %>% 
+  mutate(combu =  case_when(H05 >= 4 & H05<= 6 ~ 0,
+                            H05 >= 1 & H05<= 3 ~ 1,
+                            H05 == 7 ~ 1))
+
+# *2.2 Calcular una media de combustible por vivienda.
+
+#med.combu <- ddply(c.hogar,.(codviv),summarize, med.combu=mean(combu))
+
+med.combu <- c.hogar %>%
+group_by(codviv) %>%
+dplyr::summarize(Mean_combu = mean(combu, na.rm=TRUE))
+        
+```
+
+```{r calculo hacinamiento}
+ # *3. CÁLCULO DEL HACINAMIENTO: DORMITORIOS.
+        # *3.1 Considerar a los hogares unipersonales.
+
+c.hogar <- c.hogar %>% 
+  mutate(hacina =  case_when(TP1 == 1 ~ 1))
+
+   # *3.2 Calcular el número de dormitorios por persona.
+
+c.hogar$dormitorio <- c.hogar$H01/c.hogar$TP1
+
+  #*3.3 Normar el hacinamiento hasta un máximo de dos personas por dormitorio.
+
+c.hogar$hacinadormitorio <- c.hogar$dormitorio/0.5
+
+
+  # *3.4 Esta variable requiere de una recodificación, puesto que hay casos en los que el valor sobrepasa el máximo de 2
+        # *3.4.1 Primero. Recalcular los hogares con valores mayores a 1, hasta un máximo de 2.
+        # *3.4.2 Segundo. Copiar la variable inicial de hacinamiento, pero sólo los casos menores o iguales a 1.
+       
+
+c.hogar<- c.hogar %>% 
+  mutate(hacinarecod =  case_when(hacinadormitorio > 1 ~ ((1+(hacinadormitorio-1)/(32-1))), 
+                                  hacinadormitorio <=1 ~ hacinadormitorio ))
+
+  # *4. OTRAS VARIABLES PARA EL CÁLCULO DE HACINAMIENTO.
+  # *4.1 Calcular la existencia de cocina exclusiva para el hogar.
+
+c.hogar <- c.hogar %>% 
+  mutate(cocina =  case_when(H02 == 1 ~ 1,
+                             H02 == 2 ~ 0))
+
+ # *4.2 Calcular la existencia de baño exclusivo.
+
+c.hogar <- c.hogar %>% 
+    mutate(bano =  case_when(H03 == 1 ~ 1,
+                             H02 >= 2 & H02 <= 3 ~ 0))
+
+ # *4.3 Calcular la existencia de un cuarto extra por hogar.
+        # *4.3.1 Primero. Sumar los dormitorios exclusivos de toda la vivienda.
+
+
+#cuarto.extra <- ddply(c.hogar,.(codviv),summarize, cuartos=sum(H01))
+
+cuarto.extra <- c.hogar %>%
+group_by(codviv) %>%
+dplyr::summarize(Cuartos = sum(H01, na.rm=TRUE))
+
+c.hogar<-c.hogar %>% left_join(cuarto.extra, by = "codviv")
+
+ # *4.3.2 Comprobar qué hogares tienen cuartos extras.
+        # *OJO, PRIMERO PEGAR EN ESTA BASE LA VARIABLE DE VIVIENDA (V14).
+        # *Para pegar variable V14.
+c.viv$codviv<-paste(c.viv$I01,c.viv$I02,c.viv$I03,c.viv$I04,c.viv$I05,c.viv$I06,c.viv$I09,sep = "")
+col14<-c.viv[ -c(1:26,28:32) ]
+c.hogar<- c.hogar %>% left_join(col14, by = "codviv")
+
+c.hogar$cuarto.extra <- c.hogar$V14-c.hogar$Cuartos
+
+c.hogar <- c.hogar %>% 
+  mutate(cuarto.extraf =  case_when(cuarto.extra >= 1 ~ 1,
+                                    cuarto.extra <  1 ~ 0))
+ # *4.4 Cálculo del Hacinamiento total. 'Hacinamiento por hogar (norma=1)'
+
+
+c.hogar$hacinamientofinal <- (c.hogar$hacinarecod+c.hogar$cocina+c.hogar$bano+c.hogar$cuarto.extraf)/4
+
+# *4.5 Calcular una media de Hacinamiento por vivienda.
+
+med.haci <- c.hogar %>%
+group_by(codviv) %>%
+dplyr::summarize(Mean_haci = mean(hacinamientofinal, na.rm=TRUE))
+
+#5 las variables de hacinamiento, combustible y comunicacion en la base de vivienda
+
+c.viv<- c.viv %>% left_join(med.haci, by = "codviv")
+c.viv<- c.viv %>% left_join(med.combu, by = "codviv")
+c.viv<- c.viv %>% left_join(med.comunicacion, by = "codviv")
+
+
+```
+
+```{r calculo vivienda}
+# PARA TRABAJAR EN LA BASE DE DATOS DE VIVIENDA DEL CENSO 2010, ECUADOR.
+        # *1. CÁLCULO DE LAS CARACTERÍSTICAS FÍSICAS DE LA VIVIENDA.
+        # *1.1 Calidad de la Vivienda
+        # *1.1.1 Calidad del Techo.
+
+
+c.viv <- c.viv %>% 
+  mutate(techo =  case_when (V01 == 1 ~ 2,
+                             V01 == 4 ~ 2,
+                             V01 >= 2 & V01 <= 3 ~ 2,
+                             V01 >= 5 & V01 <= 6 ~ 0))
+
+       # *1.1.2 Calidad de paredes
+
+c.viv <- c.viv %>% 
+  mutate(paredes =  case_when (V03 == 5 ~ 1,
+                               V03 >= 6 & V03 <= 7 ~ 0,
+                               V03 >= 3 & V03 <= 4 ~ 2,
+                               V03 >= 1 & V03 <= 2 ~ 3))
+
+       # *1.1.3 Calidad de pisos
+
+c.viv <- c.viv %>% 
+  mutate(pisos =case_when (V05 == 4 ~ 1,
+                           V05 == 1 ~ 2,
+                           V05 == 3 ~ 2,
+                           V05 == 2 ~ 0,
+                           V05 >= 5 & V05 <= 7 ~ 0))
+
+        # *1.1.4 Es necesario reescalar cada variable de calidad con base en una escala de 0-1.
+
+c.viv$calitecho <- c.viv$techo/2
+c.viv$caliparedes <- c.viv$paredes/3
+c.viv$calipisos<- c.viv$pisos/2
+
+       # *1.1.5 Cálculo de indicador integrado de calidad de Vivienda.
+c.viv$calivivienda <- (c.viv$calitecho * (1/3)) +
+                      (c.viv$caliparedes * (1/3)) +
+                      (c.viv$calipisos * (1/3))
+
+ # *1.2. Confirmar que la variable de HACINAMIENTO se haya pegado de la base de datos de Hogar.
+        # *1.3. Crear la variable de Características físicas de la vivienda.
+
+c.viv$CFV<- (c.viv$calivivienda*0.5)+(c.viv$Mean_haci*0.5)
+
+```
+
+```{r calculo servicios basicos}
+
+# *2. DISPONIBILIDAD DE SERVICIOS BÁSICOS EN LA VIVIENDA.
+        # *2.1 Agua y saneamiento para la vivienda. 'Disponibilidad de agua'.
+
+c.viv <- c.viv %>% 
+  mutate(agua  =  case_when (V08 == 1 ~ 3,
+                             V08 == 2 ~ 2,
+                             V08 == 3 ~ 1,
+                             V08 == 4 ~ 0))
+ # *2.1.2 Agua reescalado.
+c.viv$caliagua<- c.viv$agua/3
+
+ #*2.1.3 Drenaje. 
+
+c.viv <- c.viv %>% 
+  mutate(drenaje  =  case_when (V09 == 1 ~ 2,
+                                V09 == 2 ~ 1,
+                                V09 >= 3 & V09 <= 6 ~ 0))
+ # *2.1.4 Drenaje reescalado.
+c.viv$calidrenaje<- c.viv$drenaje/2
+
+ # *2.1.5 Desechos. 'Eliminación de desechos'.
+c.viv <- c.viv %>% 
+  mutate(desechos =  case_when (V13 == 1 ~ 1,
+                                V13 >= 2 & V13 <= 6 ~ 0))
+
+# *2.1.6 Indicador integrado de agua y saneamiento.
+
+c.viv$AGUA_SAN<- (c.viv$caliagua*0.4)+(c.viv$calidrenaje*0.4)+(c.viv$desechos*0.2)
+
+
+```
+
+```{r calculo energia vivienda}
+
+# *2.2  Adecuación energética de la vivienda.
+        # *2.2.2 Electricidad 0-1.Disponibilidad electricidad'.
+
+c.viv <- c.viv %>% 
+  mutate(electricidad  =  case_when (V10 == 5 ~ 0,
+                                     V10 >= 1 & V10<=4 ~ 1))
+# *2.2.3 Adecuación Energética de la Vivienda: suma ponderada de combustible y electricidad.
+        # 'Adecuación de energía (combustible+electricidad)'.
+
+c.viv$ENERGIA<- (c.viv$Mean_combu*0.4)+(c.viv$electricidad*0.6)
+
+ # *2.3 Adecuación en telecomunicaciones.
+        # *2.4 Media de servicios.
+c.viv$SERVICIOS<- (c.viv$AGUA_SAN*0.5)+(c.viv$ENERGIA*0.25)+(c.viv$Mean_comunic*0.25)
+
+
+```
+
+```{r renombrar}
+
+        # *3. Cambiar nombre de Educación en la vivienda.
+        # *4. Cambiar nombre de Acceso a servicios de salud e indicador integrado de vivienda
+
+
+c.viv <- c.viv %>%
+ dplyr::rename(EDUCACION = Mean_educ)
+
+c.viv <- c.viv %>%
+  dplyr::rename(SEGURIDAD_SOCIAL = Mean_salud)
+
+c.viv <- c.viv %>%
+  dplyr::rename(VIVIENDA = CFV)
+
+
+        # *5. Cáculo de CONDICIONES DE VIDA.
+
+c.viv$ICV<-(c.viv$VIVIENDA+c.viv$SERVICIOS+c.viv$EDUCACION+c.viv$SEGURIDAD_SOCIAL)/4
+
+
+```
+
+```{r segmentacion y cuartiles}
+##Base Quito. Segmentar para el cantón, para obtener cuartiles
+
+##1 Crear columna de parroquia y sector para la segmentación
+
+c.viv$codcanton<-paste(c.viv$I01,c.viv$I02,c.viv$I03,sep = "")
+
+df.uio<-c.viv %>%
+  dplyr::filter(codcanton %in% c(170150, 170155,170157,170184))
+
+
+##2 Crear columna de cuartiles
+
+df.uio<-df.uio %>%  
+        mutate(quantile_rank = ntile(df.uio$ICV,4))
+
+df.uiofin<-df.uio %>%  
+        select(-(9:29),-(31:32),-(34:55))
+
+df.uiofin$DPA_SECTOR<-paste(df.uiofin$I01,df.uiofin$I02,df.uiofin$I03,df.uiofin$I04,df.uiofin$I05,sep = "")
+
+write.csv(df.uiofin,"UIO_ICV_VIVIENDA_COMPLETO.csv")
+
+###Pivot Table
+
+    icv.cuartil<-dcast(df.uiofin,DPA_SECTOR~quantile_rank,sum,value.var="TOTPER")
+
+write.csv(icv.cuartil,"UIO_ICV_PIVOT_CUARTIL_SECTOR_COMPLETO.csv")
+
+```
+
+```{r test y output}
+
+#comprobaciones
+
+df.uiocomp<-df.uiofin%>%  
+        group_by(DPA_SECTOR)%>%  
+        dplyr::summarize(ICVmean = mean(ICV, na.rm=TRUE))
+
+write.csv(df.uiocomp,"compareICV2.csv")
+
+##personas por sector
+
+df.totper<-df.uiofin%>%  
+        group_by(DPA_SECTOR)%>%  
+        dplyr::summarize(TOTPER = sum(TOTPER))
+
+write.csv(df.totper,"HabitantesSector.csv")
+
+c.pers$DPA_SECTOR<-paste(c.pers$I01,c.pers$I02,c.pers$I03,c.pers$I04,c.pers$I05,sep = "")
+
+df.totper2<-c.pers%>%  
+        group_by(DPA_SECTOR)%>%  
+        dplyr::summarize(TOTPER = n())
+
+write.csv(df.totper2,"HabitantesSectorPersona.csv")
+
+c.viv$DPA_SECTOR<-paste(c.viv$I01,c.viv$I02,c.viv$I03,c.viv$I04,c.viv$I05,sep = "")
+
+
+```
