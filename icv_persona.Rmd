@@ -14,29 +14,38 @@ library(dplyr)
 library(reshape2)
 library(stringr)
 library(plyr)
+library(readr)
 
 ```
 
 ```{r datos originales}
 
-###Datos originales del CNPV
-
-### Pichincha
-
-c.pers<-read.csv("Pichincha_CSV_Poblac.csv")
-c.hogar<-read.csv("Pichincha_CSV_Hogar.csv")
-c.viv<-read.csv("Pichincha_CSV_Vivienda.csv")
-
-### Azuay
-c.pers<-read.csv("Azuay_CSV_Poblac.csv")
-c.hogar<-read.csv("Azuay_CSV_Hogar.csv")
-c.viv<-read.csv("Azuay_CSV_Vivienda.csv")
+# ##Datos originales del CNPV
+# 
+# 
+# ### Azuay
+# ###
+# c.pers.ori<-read.csv(unz("data/CPV2010M_CSV_Azuay.zip",
+#                      "Azuay_CSV_Poblac.csv"), header = TRUE,
+#                  sep = ",")
+# 
+# 
+# c.hogar.ori<-read.csv(unz("data/CPV2010M_CSV_Azuay.zip",
+#                      "Azuay_CSV_Hogar.csv"), header = TRUE,
+#                  sep = ",")
+# 
+# c.viv.ori<-read.csv(unz("data/CPV2010M_CSV_Azuay.zip",
+#                      "Azuay_CSV_Vivienda.csv"), header = TRUE,
+#                  sep = ",")
 
 
 ```
 
 ```{r Recodificacion}
 
+c.pers <- c.pers.ori
+c.hogar <- c.hogar.ori
+c.viv <- c.viv.ori 
 #Recodificacion
 
 c.pers$I01<-str_pad(c.pers$I01, 2, pad = "0")
@@ -63,14 +72,51 @@ c.viv$I06<-str_pad(c.viv$I06, 2, pad = "0")
 c.viv$I09<-str_pad(c.viv$I09, 3, pad = "0")
 c.viv$I10<-str_pad(c.viv$I10, 2, pad = "0")
 
+# c.pers$dpa_canton<-paste(c.pers$I01,c.pers$I02,sep = "")
+# c.pers$dpa_parroquia<-paste(c.pers$dpa_canton,c.pers$I03,sep = "")
+# c.pers$dpa_sector<-paste(c.pers$dpa_parroquia,c.pers$I04,c.pers$I05,sep = "")
+# c.pers$dpa_manzana<-paste(c.pers$dpa_sector,c.pers$I06 ,sep = "")
+# c.pers$dpa_vivienda<-paste(c.pers$dpa_manzana,c.pers$I09 ,sep = "")
+# c.pers$dpa_hogar<-paste(c.pers$dpa_vivienda,c.pers$I10 ,sep = "")
+
+c.pers <- c.pers|>
+  mutate(cod_canton=paste0(I01,I02),
+         cod_parroquia=paste0(cod_canton,I03),
+         cod_sector=paste0(cod_parroquia,I04,I05),
+         cod_manzana=paste0(cod_sector,I06),
+         cod_vivienda=paste0(cod_manzana,I09),
+         cod_hogar=paste0(cod_vivienda,I10)
+         )|>
+  select(-c(I01:I10))
+
+
+c.hogar<- c.hogar|>
+  mutate(cod_canton=paste0(I01,I02),
+         cod_parroquia=paste0(cod_canton,I03),
+         cod_sector=paste0(cod_parroquia,I04,I05),
+         cod_manzana=paste0(cod_sector,I06),
+         cod_vivienda=paste0(cod_manzana,I09),
+         cod_hogar=paste0(cod_vivienda,I10)
+         )|>
+  select(-c(I01:I10))
+
+c.viv <- c.viv|>
+  mutate(cod_canton=paste0(I01,I02),
+         cod_parroquia=paste0(cod_canton,I03),
+         cod_sector=paste0(cod_parroquia,I04,I05),
+         cod_manzana=paste0(cod_sector,I06),
+         cod_vivienda=paste0(cod_manzana,I09)
+         )|>
+  select(-c(I01:I10))
+
 ```
+
+
 
 ```{r calculo salud}
 
 #1. CALCULO DEL INDICADOR DE SEGURIDAD SOCIAL (SALUD).
         #1.1 Diferenciar quiénes están afiliados a cualquier seguro social (IESS, ISSFA, ISSPOL).
-
-c.pers$codhog<-paste(c.pers$I01,c.pers$I02,c.pers$I03,c.pers$I04,c.pers$I05,c.pers$I06,c.pers$I09,c.pers$I10,sep = "")
 
 
 c.pers$seg.soc<- ifelse(c.pers$P35>= 1 & c.pers$P35<= 6,1,0)
@@ -79,10 +125,10 @@ c.pers$seg.soc<- ifelse(c.pers$P35>= 1 & c.pers$P35<= 6,1,0)
         #agrupamos los codigos
 
 seg.jefe <- c.pers %>%
-group_by(codhog) %>%
+group_by(cod_hogar) %>%
 dplyr::summarize(SegJefe = first(seg.soc))
 
-c.pers<-c.pers %>% left_join(seg.jefe, by = "codhog")
+c.pers<-c.pers %>% left_join(seg.jefe, by = "cod_hogar")
 
 #1.2 Calcular Seguridad social para todo el hogar. Incluye a conyugue e hijos de afiliado, ademas de seguro privado.
 
@@ -94,14 +140,13 @@ c.pers$salud<- ifelse(c.pers$seg.soc==1|c.pers$P07==1|
 
 #1.3 Calcular una media de seguridad social por vivienda.
 
-c.pers$codviv<-paste(c.pers$I01,c.pers$I02,c.pers$I03,
-                     c.pers$I04,c.pers$I05,c.pers$I06,c.pers$I09,sep = "")
 
 
-#med.segsoc <- ddply(c.pers,.(codviv),summarize, med.segsoc=mean(salud, na.rm=TRUE))
+
+#med.segsoc <- ddply(c.pers,.(cod_vivienda),summarize, med.segsoc=mean(salud, na.rm=TRUE))
 
 med.segsoc <- c.pers %>%
-group_by(codviv) %>%
+group_by(cod_vivienda) %>%
 dplyr::summarize(Mean_salud = mean(salud, na.rm=TRUE))
 
 
@@ -113,7 +158,8 @@ dplyr::summarize(Mean_salud = mean(salud, na.rm=TRUE))
         #2.1 Calcular los anos de educacion requeridos por edad. Anos que deben haber estudiado.
 
 c.pers <- c.pers %>% 
-  mutate(anos_educ = case_when(P03 == 8 ~ 2,
+  mutate(anos_req_educ = case_when(P03 == 7 ~ 1,
+                               P03 == 8 ~ 2,
                                P03 == 9 ~ 3,
                                P03 == 10 ~ 4,
                                P03 == 11 ~ 5,
@@ -125,7 +171,7 @@ c.pers <- c.pers %>%
                                P03 == 17 ~ 11,
                                P03 == 18 ~ 12,
                                P03 >= 19 ~ 13,
-                               P03 >= 0 & P03 <= 7 ~ 1))
+                               P03 >= 0 & P03 <= 6 ~ 0))
 
  #2.2 Calcular la adecuacion educativa de cada persona en el hogar.
 
@@ -133,7 +179,11 @@ c.pers <- c.pers %>%
 #  mutate(GRAESC = case_when(P03 <= 6 ~ 0))
 
 c.pers <- c.pers %>% 
-  mutate(educacion = case_when(P03 > 6  & GRAESC != 99 ~ (GRAESC/anos_educ) ))
+  mutate(educacion = case_when(P03 > 6  & GRAESC != 99 ~ (GRAESC/anos_req_educ),
+                               GRAESC == 99 ~ 0
+                               )
+         
+         )
 
 #2.3 Esta variable requiere de una recodificacion, puesto que hay casos en los que su nivel de educacion sobrepasa el maximo de 2.
   #2.3.1 Primero recalcular los datos mayores a 1 y copiar los valores mayores a 1 que estan calculados
@@ -145,19 +195,17 @@ c.pers <- c.pers %>%
 
 #2.4 Calcular la media de educacion por vivienda.
 
-#med.educ <- ddply(c.pers,.(codviv),summarize, med.educ=mean(educacion_recode))
+#med.educ <- ddply(c.pers,.(cod_vivienda),summarize, med.educ=mean(educacion_recode))
 
 med.educ <- c.pers %>%
-group_by(codviv) %>%
+group_by(cod_vivienda) %>%
 dplyr::summarize(Mean_educ = mean(educacion_recode, na.rm=TRUE))
 
 
 #POR ULTIMO, ES NECESARIO PEGAR LAS MEDIAS DE SEGURIDAD SOCIAL Y EDUCACION EN LA BASE DE DATOS DE VIVIENDA.
 
-c.viv$codviv<-paste(c.viv$I01,c.viv$I02,c.viv$I03,c.viv$I04,c.viv$I05,c.viv$I06,c.viv$I09,sep = "")
-
-c.viv<-c.viv %>% left_join(med.segsoc, by = "codviv")
-c.viv<-c.viv %>% left_join(med.educ, by = "codviv")
+c.viv<-c.viv %>% left_join(med.segsoc, by = "cod_vivienda")
+c.viv<-c.viv %>% left_join(med.educ, by = "cod_vivienda")
 
 
 ```
@@ -195,12 +243,12 @@ c.hogar$comunicacion <- (0.4*c.hogar$telefono)+(0.2*c.hogar$celular)+(0.2*c.hoga
 
 # *1.6 Calcular una media de comunicación por vivienda.
 
-c.hogar$codviv<-paste(c.hogar$I01,c.hogar$I02,c.hogar$I03,c.hogar$I04,c.hogar$I05,c.hogar$I06,c.hogar$I09,sep = "")
 
-#med.comunicacion <- ddply(c.hogar,.(codviv),summarize, med.comunicacion=mean(comunicacion))
+
+#med.comunicacion <- ddply(c.hogar,.(cod_vivienda),summarize, med.comunicacion=mean(comunicacion))
 
 med.comunicacion <- c.hogar %>%
-group_by(codviv) %>%
+group_by(cod_vivienda) %>%
 dplyr::summarize(Mean_comunic = mean(comunicacion, na.rm=TRUE))
 
 ```
@@ -211,16 +259,16 @@ dplyr::summarize(Mean_comunic = mean(comunicacion, na.rm=TRUE))
         # *En esta base se calcula una parte, y en la base de datos de vivienda, se completa el cálculo.
 
 c.hogar <- c.hogar %>% 
-  mutate(combu =  case_when(H05 >= 4 & H05<= 6 ~ 0,
+  mutate(combu =  case_when(H05 == 4 & H05<= 6 ~ 0,
                             H05 >= 1 & H05<= 3 ~ 1,
                             H05 == 7 ~ 1))
 
 # *2.2 Calcular una media de combustible por vivienda.
 
-#med.combu <- ddply(c.hogar,.(codviv),summarize, med.combu=mean(combu))
+#med.combu <- ddply(c.hogar,.(cod_vivienda),summarize, med.combu=mean(combu))
 
 med.combu <- c.hogar %>%
-group_by(codviv) %>%
+group_by(cod_vivienda) %>%
 dplyr::summarize(Mean_combu = mean(combu, na.rm=TRUE))
         
 ```
@@ -230,7 +278,9 @@ dplyr::summarize(Mean_combu = mean(combu, na.rm=TRUE))
         # *3.1 Considerar a los hogares unipersonales.
 
 c.hogar <- c.hogar %>% 
-  mutate(hacina =  case_when(TP1 == 1 ~ 1))
+  mutate(hacina =  case_when(TP1 == 1 ~ 1 # si total de personas es 1
+                             
+                             ))
 
    # *3.2 Calcular el número de dormitorios por persona.
 
@@ -247,62 +297,72 @@ c.hogar$hacinadormitorio <- c.hogar$dormitorio/0.5
        
 
 c.hogar<- c.hogar %>% 
-  mutate(hacinarecod =  case_when(hacinadormitorio > 1 ~ ((1+(hacinadormitorio-1)/(32-1))), 
-                                  hacinadormitorio <=1 ~ hacinadormitorio ))
+  mutate(hacinarecod =  case_when(
+    hacinadormitorio > 2 ~ 2,
+    hacinadormitorio <=2 ~ hacinadormitorio ))
 
   # *4. OTRAS VARIABLES PARA EL CÁLCULO DE HACINAMIENTO.
   # *4.1 Calcular la existencia de cocina exclusiva para el hogar.
 
 c.hogar <- c.hogar %>% 
-  mutate(cocina =  case_when(H02 == 1 ~ 1,
-                             H02 == 2 ~ 0))
+  mutate(cocina =  case_when(H02 == 1 ~ 1, #tiene cocina
+                             H02 == 2 ~ 0 #no tiene cocina
+                             ))
 
  # *4.2 Calcular la existencia de baño exclusivo.
 
 c.hogar <- c.hogar %>% 
-    mutate(bano =  case_when(H03 == 1 ~ 1,
-                             H02 >= 2 & H02 <= 3 ~ 0))
+    mutate(bano =  case_when(H03 == 1 ~ 1,#tiene baño
+                             .default = 0)
+           )
 
  # *4.3 Calcular la existencia de un cuarto extra por hogar.
         # *4.3.1 Primero. Sumar los dormitorios exclusivos de toda la vivienda.
 
 
-#cuarto.extra <- ddply(c.hogar,.(codviv),summarize, cuartos=sum(H01))
+#cuarto.extra <- ddply(c.hogar,.(cod_vivienda),summarize, cuartos=sum(H01))
 
-cuarto.extra <- c.hogar %>%
-group_by(codviv) %>%
-dplyr::summarize(Cuartos = sum(H01, na.rm=TRUE))
+cuarto.extra <- c.hogar |>
+  group_by(cod_vivienda) |>
+  dplyr::summarize(Cuartos = sum(H01, na.rm=TRUE))
 
-c.hogar<-c.hogar %>% left_join(cuarto.extra, by = "codviv")
+c.hogar<-c.hogar %>% left_join(cuarto.extra, by = "cod_vivienda")
 
  # *4.3.2 Comprobar qué hogares tienen cuartos extras.
         # *OJO, PRIMERO PEGAR EN ESTA BASE LA VARIABLE DE VIVIENDA (V14).
         # *Para pegar variable V14.
-c.viv$codviv<-paste(c.viv$I01,c.viv$I02,c.viv$I03,c.viv$I04,c.viv$I05,c.viv$I06,c.viv$I09,sep = "")
-col14<-c.viv[ -c(1:26,28:32) ]
-c.hogar<- c.hogar %>% left_join(col14, by = "codviv")
 
-c.hogar$cuarto.extra <- c.hogar$V14-c.hogar$Cuartos
+cuartos.viv<-c.viv|>
+  select(cod_vivienda,cuartos_vivienda=V14)
 
-c.hogar <- c.hogar %>% 
+c.hogar<- c.hogar |> 
+  left_join(cuartos.viv, by = "cod_vivienda")
+
+c.hogar<- c.hogar |>
+  mutate(cuarto.extra = cuartos_vivienda- Cuartos)
+
+c.hogar <- c.hogar |>
   mutate(cuarto.extraf =  case_when(cuarto.extra >= 1 ~ 1,
+                                    cuarto.extra >= 2 ~ 2,
                                     cuarto.extra <  1 ~ 0))
  # *4.4 Cálculo del Hacinamiento total. 'Hacinamiento por hogar (norma=1)'
 
 
-c.hogar$hacinamientofinal <- (c.hogar$hacinarecod+c.hogar$cocina+c.hogar$bano+c.hogar$cuarto.extraf)/4
+c.hogar <- c.hogar |>
+  mutate(hacinamientofinal = (hacinarecod+cocina+bano+cuarto.extraf)/4)
 
 # *4.5 Calcular una media de Hacinamiento por vivienda.
 
-med.haci <- c.hogar %>%
-group_by(codviv) %>%
-dplyr::summarize(Mean_haci = mean(hacinamientofinal, na.rm=TRUE))
+med.haci <- c.hogar|>
+group_by(cod_vivienda) |>
+dplyr::summarize(Mean_haci = mean(hacinamientofinal, na.rm=TRUE))|>
+  filter(!is.nan(Mean_haci))
 
-#5 las variables de hacinamiento, combustible y comunicacion en la base de vivienda
+#5 pasar las variables de hacinamiento, combustible y comunicacion a la base de vivienda
 
-c.viv<- c.viv %>% left_join(med.haci, by = "codviv")
-c.viv<- c.viv %>% left_join(med.combu, by = "codviv")
-c.viv<- c.viv %>% left_join(med.comunicacion, by = "codviv")
+c.viv<- c.viv %>% left_join(med.haci, by = "cod_vivienda")
+c.viv<- c.viv %>% left_join(med.combu, by = "cod_vivienda")
+c.viv<- c.viv %>% left_join(med.comunicacion, by = "cod_vivienda")
 
 
 ```
@@ -404,7 +464,9 @@ c.viv$ENERGIA<- (c.viv$Mean_combu*0.4)+(c.viv$electricidad*0.6)
 
  # *2.3 Adecuación en telecomunicaciones.
         # *2.4 Media de servicios.
-c.viv$SERVICIOS<- (c.viv$AGUA_SAN*0.5)+(c.viv$ENERGIA*0.25)+(c.viv$Mean_comunic*0.25)
+c.viv$SERVICIOS <- (c.viv$AGUA_SAN*0.5)+
+  (c.viv$ENERGIA*0.25)+
+  (c.viv$Mean_comunic*0.25)
 
 
 ```
@@ -435,62 +497,62 @@ c.viv$ICV<-(c.viv$VIVIENDA+c.viv$SERVICIOS+c.viv$EDUCACION+c.viv$SEGURIDAD_SOCIA
 ```{r filtro y cuartiles}
 ##Base Quito. Segmentar para el cantón, para obtener cuartiles
 
-##1 Crear columna de parroquia y sector para la segmentación
-
-c.viv$codcanton<-paste(c.viv$I01,c.viv$I02,c.viv$I03,sep = "")
-
-#quito
-df.uio<-c.viv %>%
-  dplyr::filter(codcanton %in% c(170150, 170155,170157,170184))
 
 
-##2 Crear columna de cuartiles
-
-df.uio<-df.uio %>%  
-        mutate(quantile_rank = ntile(df.uio$ICV,4))
-
-df.uiofin<-df.uio %>%  
-        select(-(9:29),-(31:32),-(34:55))
-
-df.uiofin$DPA_SECTOR<-paste(df.uiofin$I01,df.uiofin$I02,df.uiofin$I03,df.uiofin$I04,df.uiofin$I05,sep = "")
-
-write.csv(df.uiofin,"UIO_ICV_VIVIENDA_COMPLETO.csv")
-
-###Pivot Table
-
-    icv.cuartil<-dcast(df.uiofin,DPA_SECTOR~quantile_rank,sum,value.var="TOTPER")
-
-write.csv(icv.cuartil,"UIO_ICV_PIVOT_CUARTIL_SECTOR_COMPLETO.csv")
-
+# #quito
+# df.uio<-c.viv %>%
+#   dplyr::filter(cod_canton %in% c(170150, 170155,170157,170184))
+# 
+# 
+# ##2 Crear columna de cuartiles
+# 
+# df.uio<-df.uio %>%  
+#         mutate(quantile_rank = ntile(df.uio$ICV,4))
+# 
+# df.uiofin<-df.uio %>%  
+#         select(-(9:29),-(31:32),-(34:55))
+# 
+# df.uiofin$DPA_SECTOR<-paste(df.uiofin$I01,df.uiofin$I02,df.uiofin$I03,df.uiofin$I04,df.uiofin$I05,sep = "")
+# 
+# # write.csv(df.uiofin,"UIO_ICV_VIVIENDA_COMPLETO.csv")
+# 
+# ###Pivot Table
+# 
+#     icv.cuartil<-dcast(df.uiofin,DPA_SECTOR~quantile_rank,sum,value.var="TOTPER")
+# 
+# # write.csv(icv.cuartil,"UIO_ICV_PIVOT_CUARTIL_SECTOR_COMPLETO.csv")
+# 
 
 # Cuenca
 
 
-df.cue<-c.viv %>%
-  dplyr::filter(codcanton %in% c("010150"))
+df.cue<-c.viv |>
+  dplyr::filter(cod_parroquia %in% "010150")|>
+        mutate(quantile_rank = ntile(ICV,4))|>
+        select(cod_canton:cod_vivienda,TOTPER, TOTDOR, SEGURIDAD_SOCIAL:quantile_rank)
 
 
-df.cue<-df.cue %>%  
-        mutate(quantile_rank = ntile(df.cue$ICV,4))
+# write.csv(df.cue,"CUENCA_ICV_VIVIENDA_COMPLETO_sect.csv")
+# 
 
-df.cue<-df.cue %>%  
-        select(-(9:29),-(31:32),-(34:55))
-
-df.cue$DPA_SECTOR<-paste(df.cue$I01,df.cue$I02,df.cue$I03,df.cue$I04,df.cue$I05,sep = "")
-
-write.csv(df.cue,"CUENCA_ICV_VIVIENDA_COMPLETO.csv")
+df.cue.manzana <- pivot_wider(df.cue,
+                              id_cols = "cod_manzana",
+                              names_from = "quantile_rank",
+                              values_from = "TOTPER",
+                              values_fill = 0,
+                              values_fn = sum)
 
 ```
 
 ```{r test y output}
 
 #comprobaciones
-
-df.uiocomp<-df.uiofin%>%  
-        group_by(DPA_SECTOR)%>%  
-        dplyr::summarize(ICVmean = mean(ICV, na.rm=TRUE))
-
-write.csv(df.uiocomp,"compareICV2.csv")
+# 
+# df.uiocomp<-df.uiofin%>%  
+#         group_by(DPA_SECTOR)%>%  
+#         dplyr::summarize(ICVmean = mean(ICV, na.rm=TRUE))
+# 
+# write.csv(df.uiocomp,"compareICV2.csv")
 
 ##personas por sector
 
@@ -498,7 +560,7 @@ df.totper<-df.uiofin%>%
         group_by(DPA_SECTOR)%>%  
         dplyr::summarize(TOTPER = sum(TOTPER))
 
-write.csv(df.totper,"HabitantesSector.csv")
+# write.csv(df.totper,"HabitantesSector.csv")
 
 c.pers$DPA_SECTOR<-paste(c.pers$I01,c.pers$I02,c.pers$I03,c.pers$I04,c.pers$I05,sep = "")
 
