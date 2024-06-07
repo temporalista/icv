@@ -20,7 +20,7 @@ Debe tener instalado RStudio [www.rstudio.com](www.rstudio.com)
 
     -   Personas
 
-2.  Abrir el documento icv_persona.Rmd
+2.  Abrir en R Studio el documento icv_persona.Rmd
 
 3.  Modificar el chunk "datos originales" para apuntar a los archivos descargados
 
